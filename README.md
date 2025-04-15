@@ -1,2 +1,2 @@
 # Project-D
-Trying to create Dady game
+Repository for the Dadi IOS game.
