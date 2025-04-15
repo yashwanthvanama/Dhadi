@@ -1,0 +1,8 @@
+1. Choosing the Game Type
+2D Game
+More of a casual game
+2 player game, if a single player want to play then we have to build an agent to play against.
+This would be a board game with each player starting with 11 pieces each that they could place on the board and then moving those pieces to get rid of oponents pieces.
+How should I design this?
+For the game engine lets start with SpriteKit and build it for ios, if it works I would work on setting this up in unity to deploy to other platforms.
+
