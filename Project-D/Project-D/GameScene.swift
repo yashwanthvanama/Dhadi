@@ -19,9 +19,104 @@ class BoardGameScene: SKScene {
     private let dotColor = UIColor.green
     private let selectedDotColor = UIColor.red
     
+    enum Player {
+        case player1
+        case player2
+    }
+
+    class GameState {
+        var currentPlayer: Player = .player1
+        var player1Pieces: [SKShapeNode] = []
+        var player2Pieces: [SKShapeNode] = []
+        var piecesRemaining: [Player: Int] = [.player1: 11, .player2: 11]
+        var occupiedDots: [String: Player] = [:] // Track which player occupies each dot
+    }
+    
+    var gameState: GameState!
+    
     override func didMove(to view: SKView) {
         backgroundColor = .white
+        
+        gameState = GameState()
+        
+        // Create game board
         createGameBoard()
+        
+        // Setup UI
+        setupGameUI()
+        
+        // Add any other initialization code
+    }
+    
+    private func createPiece(for player: Player) -> SKShapeNode {
+        let piece = SKShapeNode(circleOfRadius: 10)
+        piece.fillColor = player == .player1 ? .blue : .red
+        piece.strokeColor = .black
+        piece.lineWidth = 2
+        piece.zPosition = 5 // Above dots but below UI elements
+        piece.name = "playerPiece"
+        return piece
+    }
+    
+    private func placePiece(at dot: SKShapeNode, for player: Player) {
+        guard let dotName = dot.name,
+              gameState.piecesRemaining[player]! > 0,
+              gameState.occupiedDots[dotName] == nil else { return }
+        
+        // Create and position the piece
+        let piece = createPiece(for: player)
+        piece.position = dot.position
+        dot.parent?.addChild(piece) // Add to dot's parent (the rectangle)
+        
+        // Update game state
+        if player == .player1 {
+            gameState.player1Pieces.append(piece)
+        } else {
+            gameState.player2Pieces.append(piece)
+        }
+        gameState.piecesRemaining[player]! -= 1
+        gameState.occupiedDots[dotName] = player
+        
+        // Switch turns
+        gameState.currentPlayer = (player == .player1) ? .player2 : .player1
+        updateTurnIndicator()
+    }
+    
+    private func updateTurnIndicator() {
+        guard let indicator = childNode(withName: "playerIndicator") as? SKLabelNode,
+              let p1Counter = childNode(withName: "player1Counter") as? SKLabelNode,
+              let p2Counter = childNode(withName: "player2Counter") as? SKLabelNode else { return }
+        
+        indicator.text = gameState.currentPlayer == .player1 ? "Player 1's Turn" : "Player 2's Turn"
+        indicator.fontColor = gameState.currentPlayer == .player1 ? .blue : .red
+        
+        p1Counter.text = "Player 1: \(gameState.piecesRemaining[.player1]!) pieces"
+        p2Counter.text = "Player 2: \(gameState.piecesRemaining[.player2]!) pieces"
+    }
+    
+    private func setupGameUI() {
+        // Current player indicator
+        let playerIndicator = SKLabelNode(text: "Player 1's Turn")
+        playerIndicator.name = "playerIndicator"
+        playerIndicator.fontSize = 24
+        playerIndicator.fontColor = .black
+        playerIndicator.position = CGPoint(x: size.width/2, y: size.height - 80)
+        addChild(playerIndicator)
+        
+        // Piece counters
+        let player1Counter = SKLabelNode(text: "Player 1: 11 pieces")
+        player1Counter.name = "player1Counter"
+        player1Counter.fontSize = 18
+        player1Counter.fontColor = .blue
+        player1Counter.position = CGPoint(x: 100, y: size.height - 100)
+        addChild(player1Counter)
+        
+        let player2Counter = SKLabelNode(text: "Player 2: 11 pieces")
+        player2Counter.name = "player2Counter"
+        player2Counter.fontSize = 18
+        player2Counter.fontColor = .red
+        player2Counter.position = CGPoint(x: size.width - 100, y: size.height - 100)
+        addChild(player2Counter)
     }
     
     private func createGameBoard() {
@@ -56,7 +151,7 @@ class BoardGameScene: SKScene {
             rectangles.append(rect)
             
             // Add dots to each rectangle (pawn positions)
-            //addDotsToRectangle(rect: rect)
+            addDotsToRectangle(rect: rect)
         }
         
         connectRectangles(outerRect: rectangles[0], innerRect: rectangles[1])
@@ -66,7 +161,7 @@ class BoardGameScene: SKScene {
     private func addDotsToRectangle(rect: SKShapeNode) {
         guard let rectSize = rect.path?.boundingBox.size else { return }
         
-        let dotRadius: CGFloat = 8
+        let dotRadius: CGFloat = 7
         let dotPositions: [CGPoint] = [
             // Corners
             CGPoint(x: -rectSize.width/2, y: rectSize.height/2),    // Top-left
@@ -94,7 +189,7 @@ class BoardGameScene: SKScene {
         }
     }
     
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    /*override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
         
@@ -118,7 +213,50 @@ class BoardGameScene: SKScene {
                 }
             }
         }
+    }*/
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+       
+        
+        // Debug all nodes at touch location
+        guard let touch = touches.first else { return }
+        let location = touch.location(in: self)
+        
+        // Check if a dot was touched
+        for dot in dots {
+            if let parent = dot.parent {
+                let dotPositionInScene = parent.convert(dot.position, to: self)
+                let distance = hypot(dotPositionInScene.x - location.x, dotPositionInScene.y - location.y)
+                
+                if distance < dot.frame.width/2 * 1.5 { // 1.5x radius for easier touching
+                    // Visual feedback
+                    dot.run(SKAction.sequence([
+                        SKAction.scale(to: 1.3, duration: 0.1),
+                        SKAction.scale(to: 1.0, duration: 0.1)
+                    ]))
+                    
+                    // Handle piece placement
+                    placePiece(at: dot, for: gameState.currentPlayer)
+                    break
+                }
+            }
+        }
     }
+
+    /*private func addTouchMarker(at position: CGPoint) {
+        let marker = SKShapeNode(circleOfRadius: 8)
+        marker.fillColor = .yellow
+        marker.strokeColor = .black
+        marker.lineWidth = 2
+        marker.position = position
+        marker.zPosition = 1000
+        marker.name = "touchMarker"
+        addChild(marker)
+        
+        marker.run(SKAction.sequence([
+            SKAction.fadeOut(withDuration: 0.5),
+            SKAction.removeFromParent()
+        ]))
+    }*/
         
     
     // Example pawn placement function
@@ -177,38 +315,5 @@ class BoardGameScene: SKScene {
             connectionLines.append(line)
         }
         
-        // Add visual markers at connection points (optional)
-        addConnectionMarkers(outerRect: outerRect, innerRect: innerRect)
-    }
-    
-    private func addConnectionMarkers(outerRect: SKShapeNode, innerRect: SKShapeNode) {
-        // Get the sizes of both rectangles
-        guard let outerSize = outerRect.path?.boundingBox.size,
-              let innerSize = innerRect.path?.boundingBox.size else { return }
-        
-        // Define marker positions for all four sides
-        let positions = [
-            (CGPoint(x: 0, y: outerSize.height/2), CGPoint(x: 0, y: innerSize.height/2)),   // Top
-            (CGPoint(x: outerSize.width/2, y: 0), CGPoint(x: innerSize.width/2, y: 0)),      // Right
-            (CGPoint(x: 0, y: -outerSize.height/2), CGPoint(x: 0, y: -innerSize.height/2)),  // Bottom
-            (CGPoint(x: -outerSize.width/2, y: 0), CGPoint(x: -innerSize.width/2, y: 0))    // Left
-        ]
-        
-        for (outerPos, innerPos) in positions {
-            let outerMarker = createConnectionMarker(at: outerPos, parent: outerRect)
-            let innerMarker = createConnectionMarker(at: innerPos, parent: innerRect)
-            addChild(outerMarker)
-            addChild(innerMarker)
-        }
-    }
-
-    private func createConnectionMarker(at position: CGPoint, parent: SKShapeNode) -> SKShapeNode {
-        let marker = SKShapeNode(circleOfRadius: 4)
-        marker.fillColor = lineColor
-        marker.strokeColor = .white
-        marker.lineWidth = 1
-        marker.position = parent.convert(position, to: self)
-        marker.zPosition = 0
-        return marker
     }
 }
