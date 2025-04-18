@@ -349,7 +349,6 @@ class BoardGameScene: SKScene {
                     highlight.strokeColor = .black
                     highlight.lineWidth = 3
                     highlight.position = piece.parent?.convert(piece.position, to: self) ?? piece.position
-                    print(highlight.position)
                     highlight.name = "highlight_\(piece.hash)"
                     addChild(highlight)
                     movablePieces.append(piece)
@@ -362,6 +361,7 @@ class BoardGameScene: SKScene {
     
     private func showAvailableMoves(for piece: SKShapeNode) {
         // Find the current dot
+        resetMoveIndicators()
         guard let currentDot = dots.first(where: { $0.frame.contains(piece.position) }),
               let currentDotName = currentDot.name,
               let adjacent = adjacentDots[currentDotName] else { return }
@@ -375,10 +375,10 @@ class BoardGameScene: SKScene {
             moveIndicator.fillColor = .green
             moveIndicator.strokeColor = .white
             moveIndicator.lineWidth = 2
-            moveIndicator.position = dot.position
+            moveIndicator.position = dot.parent?.convert(dot.position, to: self) ?? dot.position
             moveIndicator.name = "moveIndicator_\(dotName)"
             moveIndicator.zPosition = 5
-            dot.parent?.addChild(moveIndicator)
+            addChild(moveIndicator)
         }
     }
     
@@ -427,13 +427,20 @@ class BoardGameScene: SKScene {
     
     private func handleMovementPhaseTouch(at location: CGPoint) {
         // Check if tapping a movable piece
+        
         if selectedPiece == nil {
             for piece in movablePieces {
-                if piece.contains(location) {
-                    selectedPiece = piece
-                    showAvailableMoves(for: piece)
-                    return
-                }
+                let piecePosition = piece.parent?.convert(piece.position, to: self) ?? piece.position
+                        let distance = hypot(piecePosition.x - location.x, piecePosition.y - location.y)
+                        
+                        if distance < 20 { // Adjust this threshold to your piece size
+                            // Clear any existing move indicators
+                            //resetMoveIndicators()
+                            
+                            // Show available moves for this piece
+                            showAvailableMoves(for: piece)
+                            return
+                        }
             }
         }
         // Check if tapping a valid move location
@@ -454,6 +461,7 @@ class BoardGameScene: SKScene {
     
     private func movePiece(_ piece: SKShapeNode, to position: CGPoint) {
         // Find the old and new dots
+        print("move piece called")
         guard let oldDot = dots.first(where: { $0.frame.contains(piece.position) }),
               let oldDotName = oldDot.name,
               let newDot = dots.first(where: { $0.frame.contains(position) }),
