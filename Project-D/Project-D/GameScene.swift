@@ -19,6 +19,10 @@ class BoardGameScene: SKScene {
     private let dotColor = UIColor.green
     private let selectedDotColor = UIColor.red
     
+    private var adjacentDots: [String: [SKShapeNode]] = [:] // Maps dot names to their adjacent dots
+    private var selectedPiece: SKShapeNode?
+    private var movablePieces: [SKShapeNode] = []
+    
     enum Player {
         case player1
         case player2
@@ -28,8 +32,23 @@ class BoardGameScene: SKScene {
         var currentPlayer: Player = .player1
         var player1Pieces: [SKShapeNode] = []
         var player2Pieces: [SKShapeNode] = []
-        var piecesRemaining: [Player: Int] = [.player1: 11, .player2: 11]
+        var piecesRemaining: [Player: Int] = [.player1: 3, .player2: 3]
         var occupiedDots: [String: Player] = [:] // Track which player occupies each dot
+        
+        var gamePhase: GamePhase = .placement
+            
+        enum GamePhase {
+            case placement
+            case movement
+        }
+        
+        // Add this to check if all pieces are placed
+        func checkPhaseTransition() {
+            if piecesRemaining[.player1] == 0 && piecesRemaining[.player2] == 0 {
+                gamePhase = .movement
+                print("Game phase changed to movement")
+            }
+        }
     }
     
     var gameState: GameState!
@@ -45,43 +64,12 @@ class BoardGameScene: SKScene {
         // Setup UI
         setupGameUI()
         
+        setupAdjacentDots()
+        
         // Add any other initialization code
     }
     
-    private func createPiece(for player: Player) -> SKShapeNode {
-        let piece = SKShapeNode(circleOfRadius: 10)
-        piece.fillColor = player == .player1 ? .blue : .red
-        piece.strokeColor = .black
-        piece.lineWidth = 2
-        piece.zPosition = 5 // Above dots but below UI elements
-        piece.name = "playerPiece"
-        return piece
-    }
-    
-    private func placePiece(at dot: SKShapeNode, for player: Player) {
-        guard let dotName = dot.name,
-              gameState.piecesRemaining[player]! > 0,
-              gameState.occupiedDots[dotName] == nil else { return }
-        
-        // Create and position the piece
-        let piece = createPiece(for: player)
-        piece.position = dot.position
-        dot.parent?.addChild(piece) // Add to dot's parent (the rectangle)
-        
-        // Update game state
-        if player == .player1 {
-            gameState.player1Pieces.append(piece)
-        } else {
-            gameState.player2Pieces.append(piece)
-        }
-        gameState.piecesRemaining[player]! -= 1
-        gameState.occupiedDots[dotName] = player
-        
-        // Switch turns
-        gameState.currentPlayer = (player == .player1) ? .player2 : .player1
-        updateTurnIndicator()
-    }
-    
+    // ****************************************** Players Display Logic ****************************************************************
     private func updateTurnIndicator() {
         guard let indicator = childNode(withName: "playerIndicator") as? SKLabelNode,
               let p1Counter = childNode(withName: "player1Counter") as? SKLabelNode,
@@ -119,6 +107,42 @@ class BoardGameScene: SKScene {
         addChild(player2Counter)
     }
     
+    // *************************************** Piece Placement Logic *************************************************************
+    private func createPiece(for player: Player) -> SKShapeNode {
+        let piece = SKShapeNode(circleOfRadius: 10)
+        piece.fillColor = player == .player1 ? .blue : .red
+        piece.strokeColor = .black
+        piece.lineWidth = 2
+        piece.zPosition = 5 // Above dots but below UI elements
+        piece.name = "playerPiece"
+        return piece
+    }
+    
+    private func placePiece(at dot: SKShapeNode, for player: Player) {
+        guard let dotName = dot.name,
+              gameState.piecesRemaining[player]! > 0,
+              gameState.occupiedDots[dotName] == nil else { return }
+        
+        // Create and position the piece
+        let piece = createPiece(for: player)
+        piece.position = dot.position
+        dot.parent?.addChild(piece) // Add to dot's parent (the rectangle)
+        
+        // Update game state
+        if player == .player1 {
+            gameState.player1Pieces.append(piece)
+        } else {
+            gameState.player2Pieces.append(piece)
+        }
+        gameState.piecesRemaining[player]! -= 1
+        gameState.occupiedDots[dotName] = player
+        
+        // Switch turns
+        gameState.currentPlayer = (player == .player1) ? .player2 : .player1
+        updateTurnIndicator()
+    }
+    
+    // **************************************** Game Board Setup Logic ************************************************************
     private func createGameBoard() {
         // Clear any existing elements
         rectangles.forEach { $0.removeFromParent() }
@@ -165,15 +189,15 @@ class BoardGameScene: SKScene {
         let dotPositions: [CGPoint] = [
             // Corners
             CGPoint(x: -rectSize.width/2, y: rectSize.height/2),    // Top-left
-            CGPoint(x: rectSize.width/2, y: rectSize.height/2),     // Top-right
-            CGPoint(x: rectSize.width/2, y: -rectSize.height/2),    // Bottom-right
+            CGPoint(x: -rectSize.width/2, y: 0),                     // Left center
             CGPoint(x: -rectSize.width/2, y: -rectSize.height/2),   // Bottom-left
-            
-            // Centers of sides
-            CGPoint(x: 0, y: rectSize.height/2),                    // Top center
-            CGPoint(x: rectSize.width/2, y: 0),                     // Right center
             CGPoint(x: 0, y: -rectSize.height/2),                   // Bottom center
-            CGPoint(x: -rectSize.width/2, y: 0)                     // Left center
+            CGPoint(x: rectSize.width/2, y: -rectSize.height/2),    // Bottom-right
+            CGPoint(x: rectSize.width/2, y: 0),                     // Right center
+            CGPoint(x: rectSize.width/2, y: rectSize.height/2),     // Top-right
+            CGPoint(x: 0, y: rectSize.height/2)                    // Top center
+            
+            
         ]
         
         for (index, position) in dotPositions.enumerated() {
@@ -189,87 +213,6 @@ class BoardGameScene: SKScene {
         }
     }
     
-    /*override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        let location = touch.location(in: self)
-        
-        // Check if a dot was touched
-        for dot in dots {
-            if let parent = dot.parent {
-                let dotPositionInScene = parent.convert(dot.position, to: self)
-                if abs(dotPositionInScene.x - location.x) < 15 && abs(dotPositionInScene.y - location.y) < 15 {
-                    // Dot was tapped - change its color to indicate selection
-                    dot.fillColor = (dot.fillColor == dotColor) ? selectedDotColor : dotColor
-                    
-                    // Add visual feedback
-                    let scaleAction = SKAction.sequence([
-                        SKAction.scale(to: 1.3, duration: 0.1),
-                        SKAction.scale(to: 1.0, duration: 0.1)
-                    ])
-                    dot.run(scaleAction)
-                    
-                    // Here you would add your game logic for pawn placement
-                    return
-                }
-            }
-        }
-    }*/
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-       
-        
-        // Debug all nodes at touch location
-        guard let touch = touches.first else { return }
-        let location = touch.location(in: self)
-        
-        // Check if a dot was touched
-        for dot in dots {
-            if let parent = dot.parent {
-                let dotPositionInScene = parent.convert(dot.position, to: self)
-                let distance = hypot(dotPositionInScene.x - location.x, dotPositionInScene.y - location.y)
-                
-                if distance < dot.frame.width/2 * 1.5 { // 1.5x radius for easier touching
-                    // Visual feedback
-                    dot.run(SKAction.sequence([
-                        SKAction.scale(to: 1.3, duration: 0.1),
-                        SKAction.scale(to: 1.0, duration: 0.1)
-                    ]))
-                    
-                    // Handle piece placement
-                    placePiece(at: dot, for: gameState.currentPlayer)
-                    break
-                }
-            }
-        }
-    }
-
-    /*private func addTouchMarker(at position: CGPoint) {
-        let marker = SKShapeNode(circleOfRadius: 8)
-        marker.fillColor = .yellow
-        marker.strokeColor = .black
-        marker.lineWidth = 2
-        marker.position = position
-        marker.zPosition = 1000
-        marker.name = "touchMarker"
-        addChild(marker)
-        
-        marker.run(SKAction.sequence([
-            SKAction.fadeOut(withDuration: 0.5),
-            SKAction.removeFromParent()
-        ]))
-    }*/
-        
-    
-    // Example pawn placement function
-    private func placePawn(at position: CGPoint, player: Int) {
-        let pawn = SKShapeNode(circleOfRadius: 10)
-        pawn.fillColor = player == 1 ? .blue : .red
-        pawn.strokeColor = .black
-        pawn.lineWidth = 1.5
-        pawn.position = position
-        pawn.zPosition = 2
-        addChild(pawn)
-    }
-    
     private func connectRectangles(outerRect: SKShapeNode, innerRect: SKShapeNode) {
         // Clear any existing connection lines between these rectangles
         //connectionLines.forEach { $0.removeFromParent() }
@@ -277,7 +220,7 @@ class BoardGameScene: SKScene {
         
         // Get the sizes of both rectangles
         guard let outerSize = outerRect.path?.boundingBox.size,
-              let innerSize = innerRect.path?.boundingBox.size else { return }
+        let innerSize = innerRect.path?.boundingBox.size else { return }
         
         // Define the connection points for all four sides
         let outerPoints = [
@@ -316,4 +259,246 @@ class BoardGameScene: SKScene {
         }
         
     }
+    
+    //*********************************************** Piece Movement Logic ****************************************************************
+    
+    private func setupAdjacentDots() {
+        adjacentDots.removeAll()
+        
+        // Create a dictionary to quickly find dots by name
+        var dotDictionary = [String: SKShapeNode]()
+        for dot in dots {
+            if let name = dot.name {
+                dotDictionary[name] = dot
+            }
+        }
+        
+        for dot in dots {
+            guard let dotName = dot.name else { continue }
+            
+            // Parse the dot name "dot_rectangle_index"
+            let components = dotName.components(separatedBy: "_")
+            guard components.count == 3,
+                  let rectangle = Int(components[1]),
+                  let index = Int(components[2]) else {
+                continue
+            }
+            
+            var adjacentDotNames = [String]()
+            
+            // Calculate same-rectangle adjacents (for both corners and centers)
+            let adjacentIndex1 = (index + 7) % 8
+            let adjacentIndex2 = (index + 9) % 8
+            adjacentDotNames.append("dot_\(rectangle)_\(adjacentIndex1)")
+            adjacentDotNames.append("dot_\(rectangle)_\(adjacentIndex2)")
+            
+            // For center dots (even index), add cross-rectangle adjacents
+            if index % 2 == 1 {
+                if rectangle == 1 {  // Outer rectangle
+                    // Connect to middle rectangle (rectangle +1)
+                    adjacentDotNames.append("dot_\(rectangle + 1)_\(index)")
+                }
+                else if rectangle == 2 {  // Middle rectangle
+                    // Connect to both outer and inner
+                    adjacentDotNames.append("dot_\(rectangle - 1)_\(index)")  // Outer
+                    adjacentDotNames.append("dot_\(rectangle + 1)_\(index)")  // Inner
+                }
+                else if rectangle == 3 {  // Inner rectangle
+                    // Connect to middle rectangle (rectangle -1)
+                    adjacentDotNames.append("dot_\(rectangle - 1)_\(index)")
+                }
+            }
+            
+            // Filter out invalid dot names and get the actual dot nodes
+            let validAdjacentDots = adjacentDotNames.compactMap { dotDictionary[$0] }
+            adjacentDots[dotName] = validAdjacentDots
+            
+        }
+    }
+    
+    private func resetHighlights() {
+        movablePieces.removeAll()
+        children.filter { $0.name?.hasPrefix("highlight_") == true }.forEach {
+            $0.removeFromParent()
+        }
+    }
+    
+    private func highlightMovablePieces(for player: Player) {
+        // Reset all highlights
+        resetHighlights()
+        
+        // Find all pieces belonging to current player that can move
+        let playerPieces = (player == .player1) ? gameState.player1Pieces : gameState.player2Pieces
+        
+        for piece in playerPieces {
+            // Find the dot this piece is on
+            if let dot = dots.first(where: { $0.frame.contains(piece.position) }),
+               let dotName = dot.name,
+               let adjacent = adjacentDots[dotName] {
+                
+                // Check if any adjacent dot is unoccupied
+                let hasVacantAdjacent = adjacent.contains { adjacentDot in
+                    guard let adjacentDotName = adjacentDot.name else { return false }
+                    return gameState.occupiedDots[adjacentDotName] == nil
+                }
+                
+                if hasVacantAdjacent {
+                    // Highlight this piece as movable
+                    let highlight = SKShapeNode(circleOfRadius: 15)
+                    highlight.fillColor = .clear
+                    highlight.strokeColor = .black
+                    highlight.lineWidth = 3
+                    highlight.position = piece.parent?.convert(piece.position, to: self) ?? piece.position
+                    print(highlight.position)
+                    highlight.name = "highlight_\(piece.hash)"
+                    addChild(highlight)
+                    movablePieces.append(piece)
+                }
+            }
+        }
+        
+        print("Found \(movablePieces.count) movable pieces for \(player)")
+    }
+    
+    private func showAvailableMoves(for piece: SKShapeNode) {
+        // Find the current dot
+        guard let currentDot = dots.first(where: { $0.frame.contains(piece.position) }),
+              let currentDotName = currentDot.name,
+              let adjacent = adjacentDots[currentDotName] else { return }
+        
+        // Highlight available adjacent dots
+        for dot in adjacent {
+            guard let dotName = dot.name,
+                  gameState.occupiedDots[dotName] == nil else { continue }
+            
+            let moveIndicator = SKShapeNode(circleOfRadius: 10)
+            moveIndicator.fillColor = .green
+            moveIndicator.strokeColor = .white
+            moveIndicator.lineWidth = 2
+            moveIndicator.position = dot.position
+            moveIndicator.name = "moveIndicator_\(dotName)"
+            moveIndicator.zPosition = 5
+            dot.parent?.addChild(moveIndicator)
+        }
+    }
+    
+    //*********************************************** Touches Began Logic *****************************************************************
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+       
+        
+        // Debug all nodes at touch location
+        guard let touch = touches.first else { return }
+        let location = touch.location(in: self)
+        switch gameState.gamePhase {
+            case .placement:
+                handlePlacementPhaseTouch(at: location)
+            case .movement:
+                handleMovementPhaseTouch(at: location)
+            }
+    }
+    
+    private func handlePlacementPhaseTouch(at location: CGPoint) {
+        // Check if a dot was touched
+        for dot in dots {
+            if let parent = dot.parent {
+                let dotPositionInScene = parent.convert(dot.position, to: self)
+                let distance = hypot(dotPositionInScene.x - location.x, dotPositionInScene.y - location.y)
+                
+                if distance < dot.frame.width/2 * 1.5 { // 1.5x radius for easier touching
+                    // Visual feedback
+                    dot.run(SKAction.sequence([
+                        SKAction.scale(to: 1.3, duration: 0.1),
+                        SKAction.scale(to: 1.0, duration: 0.1)
+                    ]))
+                    
+                    // Handle piece placement
+                    placePiece(at: dot, for: gameState.currentPlayer)
+                    gameState.checkPhaseTransition()
+                    
+                    if gameState.gamePhase == .movement {
+                        highlightMovablePieces(for: gameState.currentPlayer)
+                    }
+                    break
+                }
+            }
+        }
+        
+    }
+    
+    private func handleMovementPhaseTouch(at location: CGPoint) {
+        // Check if tapping a movable piece
+        if selectedPiece == nil {
+            for piece in movablePieces {
+                if piece.contains(location) {
+                    selectedPiece = piece
+                    showAvailableMoves(for: piece)
+                    return
+                }
+            }
+        }
+        // Check if tapping a valid move location
+        else if let piece = selectedPiece,
+                let moveIndicator = nodes(at: location).first(where: { $0.name?.hasPrefix("moveIndicator_") == true }) {
+            
+            // Move the piece
+            movePiece(piece, to: moveIndicator.position)
+            selectedPiece = nil
+        }
+        else {
+            // Deselect if tapping elsewhere
+            selectedPiece = nil
+            resetMoveIndicators()
+            highlightMovablePieces(for: gameState.currentPlayer)
+        }
+    }
+    
+    private func movePiece(_ piece: SKShapeNode, to position: CGPoint) {
+        // Find the old and new dots
+        guard let oldDot = dots.first(where: { $0.frame.contains(piece.position) }),
+              let oldDotName = oldDot.name,
+              let newDot = dots.first(where: { $0.frame.contains(position) }),
+              let newDotName = newDot.name else { return }
+        
+        // Update game state
+        gameState.occupiedDots[oldDotName] = nil
+        gameState.occupiedDots[newDotName] = gameState.currentPlayer
+        
+        // Animate movement
+        let moveAction = SKAction.move(to: position, duration: 0.2)
+        moveAction.timingMode = .easeOut
+        piece.run(moveAction)
+        
+        // Clean up and switch turns
+        resetMoveIndicators()
+        resetHighlights()
+        
+        // Switch players
+        gameState.currentPlayer = (gameState.currentPlayer == .player1) ? .player2 : .player1
+        updateTurnIndicator()
+        
+        // Highlight movable pieces for new player
+        highlightMovablePieces(for: gameState.currentPlayer)
+    }
+    
+    private func resetMoveIndicators() {
+        children.filter { $0.name?.hasPrefix("moveIndicator_") == true }.forEach {
+            $0.removeFromParent()
+        }
+    }
+
+    /*private func addTouchMarker(at position: CGPoint) {
+        let marker = SKShapeNode(circleOfRadius: 8)
+        marker.fillColor = .yellow
+        marker.strokeColor = .black
+        marker.lineWidth = 2
+        marker.position = position
+        marker.zPosition = 1000
+        marker.name = "touchMarker"
+        addChild(marker)
+        
+        marker.run(SKAction.sequence([
+            SKAction.fadeOut(withDuration: 0.5),
+            SKAction.removeFromParent()
+        ]))
+    }*/
 }
