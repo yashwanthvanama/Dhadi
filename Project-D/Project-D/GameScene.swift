@@ -362,6 +362,7 @@ class BoardGameScene: SKScene {
     private func showAvailableMoves(for piece: SKShapeNode) {
         // Find the current dot
         resetMoveIndicators()
+        selectedPiece = piece
         guard let currentDot = dots.first(where: { $0.frame.contains(piece.position) }),
               let currentDotName = currentDot.name,
               let adjacent = adjacentDots[currentDotName] else { return }
@@ -427,7 +428,6 @@ class BoardGameScene: SKScene {
     
     private func handleMovementPhaseTouch(at location: CGPoint) {
         // Check if tapping a movable piece
-        
         if selectedPiece == nil {
             for piece in movablePieces {
                 let piecePosition = piece.parent?.convert(piece.position, to: self) ?? piece.position
@@ -446,7 +446,6 @@ class BoardGameScene: SKScene {
         // Check if tapping a valid move location
         else if let piece = selectedPiece,
                 let moveIndicator = nodes(at: location).first(where: { $0.name?.hasPrefix("moveIndicator_") == true }) {
-            
             // Move the piece
             movePiece(piece, to: moveIndicator.position)
             selectedPiece = nil
@@ -460,19 +459,37 @@ class BoardGameScene: SKScene {
     }
     
     private func movePiece(_ piece: SKShapeNode, to position: CGPoint) {
-        // Find the old and new dots
-        print("move piece called")
-        guard let oldDot = dots.first(where: { $0.frame.contains(piece.position) }),
-              let oldDotName = oldDot.name,
-              let newDot = dots.first(where: { $0.frame.contains(position) }),
-              let newDotName = newDot.name else { return }
+        // Convert all positions to scene coordinates for accurate comparison
+        let scenePosition = piece.parent?.convert(piece.position, to: self) ?? piece.position
+        
+        // Find old dot (where piece currently is)
+        guard let oldDot = dots.first(where: { dot in
+            let dotPosInScene = dot.parent?.convert(dot.position, to: self) ?? dot.position
+            let distance = hypot(dotPosInScene.x - scenePosition.x, dotPosInScene.y - scenePosition.y)
+            return distance < 20 // Adjust based on your dot size
+        }), let oldDotName = oldDot.name else {
+            print("Error: Couldn't find old dot for piece at \(scenePosition)")
+            return
+        }
+        
+        // Find new dot (target position)
+        guard let newDot = dots.first(where: { dot in
+            let dotPosInScene = dot.parent?.convert(dot.position, to: self) ?? dot.position
+            let distance = hypot(dotPosInScene.x - position.x, dotPosInScene.y - position.y)
+            return distance < 20 // Adjust based on your dot size
+        }), let newDotName = newDot.name else {
+            print("Error: Couldn't find new dot at target position \(position)")
+            return
+        }
+        
+        print("Moving from \(oldDotName) to \(newDotName)")
         
         // Update game state
         gameState.occupiedDots[oldDotName] = nil
         gameState.occupiedDots[newDotName] = gameState.currentPlayer
         
         // Animate movement
-        let moveAction = SKAction.move(to: position, duration: 0.2)
+        let moveAction = SKAction.move(to: newDot.position, duration: 0.2)
         moveAction.timingMode = .easeOut
         piece.run(moveAction)
         
