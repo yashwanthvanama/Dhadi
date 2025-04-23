@@ -128,7 +128,6 @@ class BoardGameScene: SKScene {
         piece.strokeColor = .black
         piece.lineWidth = 2
         piece.zPosition = 5 // Above dots but below UI elements
-        piece.name = "playerPiece"
         return piece
     }
     
@@ -140,6 +139,7 @@ class BoardGameScene: SKScene {
         // Create and position the piece
         let piece = createPiece(for: player)
         piece.position = dot.position
+        piece.name = dot.name
         dot.parent?.addChild(piece) // Add to dot's parent (the rectangle)
         
         // Update game state
@@ -151,6 +151,8 @@ class BoardGameScene: SKScene {
         gameState.piecesRemaining[player]! -= 1
         gameState.occupiedDots[dotName] = player
         
+        let isDadi = checkForDadi(piece, player: gameState.currentPlayer)
+        print(isDadi)
         // Switch turns
         gameState.currentPlayer = (player == .player1) ? .player2 : .player1
         updateTurnIndicator()
@@ -399,7 +401,6 @@ class BoardGameScene: SKScene {
     //*********************************************** Touches Began Logic *****************************************************************
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
        
-        
         // Debug all nodes at touch location
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
@@ -496,12 +497,15 @@ class BoardGameScene: SKScene {
         // Update game state
         gameState.occupiedDots[oldDotName] = nil
         gameState.occupiedDots[newDotName] = gameState.currentPlayer
+        piece.name = newDotName
         
         // Animate movement
         let moveAction = SKAction.move(to: newDot.position, duration: 0.2)
         moveAction.timingMode = .easeOut
         piece.run(moveAction)
         
+        let isDadi = checkForDadi(piece, player: gameState.currentPlayer)
+        print(isDadi)
         // Clean up and switch turns
         resetMoveIndicators()
         resetHighlights()
@@ -522,4 +526,60 @@ class BoardGameScene: SKScene {
 
     // **************************************** Dadi Logic ****************************************
     
+    private func checkForDadi(_ piece: SKShapeNode, player: Player) -> Bool {
+        guard let pieceName = piece.name,
+              pieceName.components(separatedBy: "_").count == 3 else {
+            return false
+        }
+        
+        // Extract components with proper error handling
+        let components = pieceName.components(separatedBy: "_")
+        guard components.count == 3 else {
+            return false
+        }
+        
+        // Get the components without optional binding since they're guaranteed to exist
+        guard let rectangleNum = Int(components[1]) else {
+            return false
+        }// This is now safe because we checked count == 3
+        guard let indexNum = Int(components[2]) else {
+            return false
+        }
+        if indexNum % 2 == 0 {
+            // Calculate adjacent positions safely
+            let nextPos1 = (indexNum + 1) % 8
+            let nextPos2 = (indexNum + 2) % 8
+            let prevPos1 = (indexNum - 1 + 8) % 8  // +8 before % to avoid negative numbers
+            let prevPos2 = (indexNum - 2 + 8) % 8
+            
+            // Check both directions
+            let forwardDadi = isOccupiedByPlayer("dot_\(rectangleNum)_\(nextPos1)", player: player) &&
+                             isOccupiedByPlayer("dot_\(rectangleNum)_\(nextPos2)", player: player)
+            
+            let backwardDadi = isOccupiedByPlayer("dot_\(rectangleNum)_\(prevPos1)", player: player) &&
+                              isOccupiedByPlayer("dot_\(rectangleNum)_\(prevPos2)", player: player)
+            
+            return forwardDadi || backwardDadi
+        }
+        else{
+            // Calculate adjacent positions safely
+            let nextPos1 = (indexNum + 1) % 8
+            let nextPos2 = (indexNum - 1 + 8) % 8
+            let rectPos1 = (rectangleNum + 1) % 3  // +8 before % to avoid negative numbers
+            let rectPos2 = (rectangleNum + 2) % 3
+            
+            // Check both directions
+            let forwardDadi = isOccupiedByPlayer("dot_\(rectangleNum)_\(nextPos1)", player: player) &&
+                             isOccupiedByPlayer("dot_\(rectangleNum)_\(nextPos2)", player: player)
+            
+            let backwardDadi = isOccupiedByPlayer("dot_\(rectPos1)_\(indexNum)", player: player) &&
+            isOccupiedByPlayer("dot_\(rectPos2)_\(indexNum)", player: player)
+            
+            return forwardDadi || backwardDadi
+        }
+    }
+    
+    private func isOccupiedByPlayer(_ dotName: String, player: Player) -> Bool {
+        return gameState.occupiedDots[dotName] == player
+    }
 }
