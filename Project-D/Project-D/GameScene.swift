@@ -49,6 +49,20 @@ class BoardGameScene: SKScene {
                 print("Game phase changed to movement")
             }
         }
+        
+        var dadiFormedThisTurn = false
+        var piecesCaptured: [Player: Int] = [.player1: 0, .player2: 0]
+        
+        func checkWinCondition() -> Player? {
+            // Win if opponent has less than 3 pieces remaining
+            if piecesCaptured[.player1]! > 9 {
+                return .player1
+            }
+            if piecesRemaining[.player2]! > 9 {
+                return .player2
+            }
+            return nil
+        }
     }
     
     var gameState: GameState!
@@ -294,16 +308,16 @@ class BoardGameScene: SKScene {
             
             // For center dots (even index), add cross-rectangle adjacents
             if index % 2 == 1 {
-                if rectangle == 1 {  // Outer rectangle
+                if rectangle == 0 {  // Outer rectangle
                     // Connect to middle rectangle (rectangle +1)
                     adjacentDotNames.append("dot_\(rectangle + 1)_\(index)")
                 }
-                else if rectangle == 2 {  // Middle rectangle
+                else if rectangle == 1 {  // Middle rectangle
                     // Connect to both outer and inner
                     adjacentDotNames.append("dot_\(rectangle - 1)_\(index)")  // Outer
                     adjacentDotNames.append("dot_\(rectangle + 1)_\(index)")  // Inner
                 }
-                else if rectangle == 3 {  // Inner rectangle
+                else if rectangle == 2 {  // Inner rectangle
                     // Connect to middle rectangle (rectangle -1)
                     adjacentDotNames.append("dot_\(rectangle - 1)_\(index)")
                 }
@@ -356,7 +370,6 @@ class BoardGameScene: SKScene {
             }
         }
         
-        print("Found \(movablePieces.count) movable pieces for \(player)")
     }
     
     private func showAvailableMoves(for piece: SKShapeNode) {
@@ -427,24 +440,8 @@ class BoardGameScene: SKScene {
     }
     
     private func handleMovementPhaseTouch(at location: CGPoint) {
-        // Check if tapping a movable piece
-        if selectedPiece == nil {
-            for piece in movablePieces {
-                let piecePosition = piece.parent?.convert(piece.position, to: self) ?? piece.position
-                        let distance = hypot(piecePosition.x - location.x, piecePosition.y - location.y)
-                        
-                        if distance < 20 { // Adjust this threshold to your piece size
-                            // Clear any existing move indicators
-                            //resetMoveIndicators()
-                            
-                            // Show available moves for this piece
-                            showAvailableMoves(for: piece)
-                            return
-                        }
-            }
-        }
         // Check if tapping a valid move location
-        else if let piece = selectedPiece,
+        if let piece = selectedPiece,
                 let moveIndicator = nodes(at: location).first(where: { $0.name?.hasPrefix("moveIndicator_") == true }) {
             // Move the piece
             movePiece(piece, to: moveIndicator.position)
@@ -454,6 +451,19 @@ class BoardGameScene: SKScene {
             // Deselect if tapping elsewhere
             selectedPiece = nil
             resetMoveIndicators()
+            for piece in movablePieces {
+                let piecePosition = piece.parent?.convert(piece.position, to: self) ?? piece.position
+                let distance = hypot(piecePosition.x - location.x, piecePosition.y - location.y)
+                
+                if distance < 20 { // Adjust this threshold to your piece size
+                    // Clear any existing move indicators
+                    //resetMoveIndicators()
+                    
+                    // Show available moves for this piece
+                    showAvailableMoves(for: piece)
+                    return
+                }
+            }
             highlightMovablePieces(for: gameState.currentPlayer)
         }
     }
@@ -482,7 +492,6 @@ class BoardGameScene: SKScene {
             return
         }
         
-        print("Moving from \(oldDotName) to \(newDotName)")
         
         // Update game state
         gameState.occupiedDots[oldDotName] = nil
@@ -511,19 +520,6 @@ class BoardGameScene: SKScene {
         }
     }
 
-    /*private func addTouchMarker(at position: CGPoint) {
-        let marker = SKShapeNode(circleOfRadius: 8)
-        marker.fillColor = .yellow
-        marker.strokeColor = .black
-        marker.lineWidth = 2
-        marker.position = position
-        marker.zPosition = 1000
-        marker.name = "touchMarker"
-        addChild(marker)
-        
-        marker.run(SKAction.sequence([
-            SKAction.fadeOut(withDuration: 0.5),
-            SKAction.removeFromParent()
-        ]))
-    }*/
+    // **************************************** Dadi Logic ****************************************
+    
 }
