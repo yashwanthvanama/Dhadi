@@ -32,7 +32,7 @@ class BoardGameScene: SKScene {
         var currentPlayer: Player = .player1
         var player1Pieces: [SKShapeNode] = []
         var player2Pieces: [SKShapeNode] = []
-        var piecesRemaining: [Player: Int] = [.player1: 3, .player2: 3]
+        var piecesRemaining: [Player: Int] = [.player1: 5, .player2: 5]
         var occupiedDots: [String: Player] = [:] // Track which player occupies each dot
         
         var gamePhase: GamePhase = .placement
@@ -152,7 +152,9 @@ class BoardGameScene: SKScene {
         gameState.occupiedDots[dotName] = player
         
         let isDadi = checkForDadi(piece, player: gameState.currentPlayer)
-        print(isDadi)
+        if (isDadi) {
+            highlightRemovableOpponentPieces(for: gameState.currentPlayer)
+        }
         // Switch turns
         gameState.currentPlayer = (player == .player1) ? .player2 : .player1
         updateTurnIndicator()
@@ -505,7 +507,9 @@ class BoardGameScene: SKScene {
         piece.run(moveAction)
         
         let isDadi = checkForDadi(piece, player: gameState.currentPlayer)
-        print(isDadi)
+        if (isDadi) {
+            highlightRemovableOpponentPieces(for: gameState.currentPlayer)
+        }
         // Clean up and switch turns
         resetMoveIndicators()
         resetHighlights()
@@ -581,5 +585,28 @@ class BoardGameScene: SKScene {
     
     private func isOccupiedByPlayer(_ dotName: String, player: Player) -> Bool {
         return gameState.occupiedDots[dotName] == player
+    }
+    
+    // ************************************************************* Piece Removal Logic ***************************************************
+    
+    private func highlightRemovableOpponentPieces(for currentPlayer: Player) {
+        resetHighlights()
+        
+        let opponent: Player = (currentPlayer == .player1) ? .player2 : .player1
+        let opponentPieces = (opponent == .player1) ? gameState.player1Pieces : gameState.player2Pieces
+        
+        for piece in opponentPieces {
+            if checkForDadi(piece, player: opponent) {
+                continue
+            }
+            let highlight = SKShapeNode(circleOfRadius: 15)
+            highlight.fillColor = .clear
+            highlight.strokeColor = .systemRed // Different color for removable pieces
+            highlight.lineWidth = 2
+            highlight.position = piece.position
+            highlight.name = "removable_highlight"
+            highlight.zPosition = piece.zPosition + 1
+            piece.parent?.addChild(highlight)
+        }
     }
 }
