@@ -22,6 +22,7 @@ class BoardGameScene: SKScene {
     private var adjacentDots: [String: [SKShapeNode]] = [:] // Maps dot names to their adjacent dots
     private var selectedPiece: SKShapeNode?
     private var movablePieces: [SKShapeNode] = []
+    private var removablePieces: [SKShapeNode] = []
     
     enum Player {
         case player1
@@ -34,6 +35,7 @@ class BoardGameScene: SKScene {
         var player2Pieces: [SKShapeNode] = []
         var piecesRemaining: [Player: Int] = [.player1: 5, .player2: 5]
         var occupiedDots: [String: Player] = [:] // Track which player occupies each dot
+        var isRemovalPhase = false
         
         var gamePhase: GamePhase = .placement
             
@@ -153,11 +155,18 @@ class BoardGameScene: SKScene {
         
         let isDadi = checkForDadi(piece, player: gameState.currentPlayer)
         if (isDadi) {
-            highlightRemovableOpponentPieces(for: gameState.currentPlayer)
+            onDadiFormed(for: gameState.currentPlayer)
         }
-        // Switch turns
-        gameState.currentPlayer = (player == .player1) ? .player2 : .player1
-        updateTurnIndicator()
+        else {
+            // Switch turns
+            gameState.currentPlayer = (player == .player1) ? .player2 : .player1
+            updateTurnIndicator()
+            gameState.checkPhaseTransition()
+            
+            if gameState.gamePhase == .movement {
+                highlightMovablePieces(for: gameState.currentPlayer)
+            }
+        }
     }
     
     // **************************************** Game Board Setup Logic ************************************************************
@@ -401,11 +410,18 @@ class BoardGameScene: SKScene {
     }
     
     //*********************************************** Touches Began Logic *****************************************************************
+    
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
        
         // Debug all nodes at touch location
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
+        
+        if gameState.isRemovalPhase {
+            handleRemovalPhaseTouch(at: location)
+            return
+        }
+        
         switch gameState.gamePhase {
             case .placement:
                 handlePlacementPhaseTouch(at: location)
@@ -430,11 +446,6 @@ class BoardGameScene: SKScene {
                     
                     // Handle piece placement
                     placePiece(at: dot, for: gameState.currentPlayer)
-                    gameState.checkPhaseTransition()
-                    
-                    if gameState.gamePhase == .movement {
-                        highlightMovablePieces(for: gameState.currentPlayer)
-                    }
                     break
                 }
             }
@@ -508,18 +519,22 @@ class BoardGameScene: SKScene {
         
         let isDadi = checkForDadi(piece, player: gameState.currentPlayer)
         if (isDadi) {
-            highlightRemovableOpponentPieces(for: gameState.currentPlayer)
+            resetMoveIndicators()
+            resetHighlights()
+            onDadiFormed(for: gameState.currentPlayer)
         }
-        // Clean up and switch turns
-        resetMoveIndicators()
-        resetHighlights()
-        
-        // Switch players
-        gameState.currentPlayer = (gameState.currentPlayer == .player1) ? .player2 : .player1
-        updateTurnIndicator()
-        
-        // Highlight movable pieces for new player
-        highlightMovablePieces(for: gameState.currentPlayer)
+        else {
+            // Clean up and switch turns
+            resetMoveIndicators()
+            resetHighlights()
+            
+            // Switch players
+            gameState.currentPlayer = (gameState.currentPlayer == .player1) ? .player2 : .player1
+            updateTurnIndicator()
+            
+            // Highlight movable pieces for new player
+            highlightMovablePieces(for: gameState.currentPlayer)
+        }
     }
     
     private func resetMoveIndicators() {
@@ -587,6 +602,58 @@ class BoardGameScene: SKScene {
         return gameState.occupiedDots[dotName] == player
     }
     
+    
+    private func showDadiFormedMessage() {
+        // Remove any existing message first
+        removeDadiMessage()
+        
+        // Create message label
+        let message = SKLabelNode(text: "DADI FORMED! Select opponent's piece to remove")
+        message.fontName = "Avenir-Bold"
+        message.fontColor = .red
+        message.horizontalAlignmentMode = .center
+        message.position = CGPoint(x: size.width/2, y: 50) // Bottom center
+        message.zPosition = 100
+        message.name = "dadiMessage"
+        
+        // Calculate dynamic font size based on screen width
+        let baseFontSize: CGFloat = 24
+        let minFontSize: CGFloat = 12
+        let maxFontSize: CGFloat = 36
+        let targetWidth = size.width * 0.9 // Use 90% of screen width
+        
+        // Adjust font size to fit
+        var fontSize = baseFontSize
+        var textWidth: CGFloat = 0
+        
+        repeat {
+            message.fontSize = fontSize
+            textWidth = message.frame.width
+            if textWidth > targetWidth {
+                fontSize -= 1
+            }
+        } while textWidth > targetWidth && fontSize > minFontSize
+        
+        // Ensure we don't go below minimum size
+        message.fontSize = max(fontSize, minFontSize)
+        // And don't exceed maximum size
+        message.fontSize = min(message.fontSize, maxFontSize)
+        
+        // Add pulsing animation
+        let pulse = SKAction.sequence([
+            SKAction.scale(to: 1.1, duration: 0.5),
+            SKAction.scale(to: 1.0, duration: 0.5)
+        ])
+        message.run(SKAction.repeatForever(pulse))
+        
+        // Add to scene
+        addChild(message)
+    }
+    // Also add this to clean up when done
+    private func removeDadiMessage() {
+        childNode(withName: "dadiMessage")?.removeFromParent()
+    }
+    
     // ************************************************************* Piece Removal Logic ***************************************************
     
     private func highlightRemovableOpponentPieces(for currentPlayer: Player) {
@@ -602,11 +669,183 @@ class BoardGameScene: SKScene {
             let highlight = SKShapeNode(circleOfRadius: 15)
             highlight.fillColor = .clear
             highlight.strokeColor = .systemRed // Different color for removable pieces
-            highlight.lineWidth = 2
-            highlight.position = piece.position
-            highlight.name = "removable_highlight"
+            highlight.lineWidth = 3
+            highlight.position = piece.parent?.convert(piece.position, to: self) ?? piece.position
+            highlight.name = "Removable_highlight_\(piece.hash)"
             highlight.zPosition = piece.zPosition + 1
-            piece.parent?.addChild(highlight)
+            addChild(highlight)
+            removablePieces.append(piece)
         }
+    }
+    
+    private func handleRemovalPhaseTouch(at location: CGPoint) {
+        // Find if a removable piece was tapped
+        
+        for piece in removablePieces {
+            let piecePosition = piece.parent?.convert(piece.position, to: self) ?? piece.position
+            let distance = hypot(piecePosition.x - location.x, piecePosition.y - location.y)
+            
+            if distance < 20 { // Adjust this threshold to your piece size
+                // Clear any existing move indicators
+                //resetMoveIndicators()
+                
+                // Show available moves for this piece
+                removeOpponentPiece(piece)
+                return
+            }
+        }
+        // If tap wasn't on a removable piece, show error feedback
+        showInvalidSelectionFeedback(at: location)
+    }
+    
+    private func removeOpponentPiece(_ piece: SKShapeNode) {
+        // Determine which player this piece belongs to
+        let isPlayer1Piece = gameState.player1Pieces.contains(piece)
+        //let opponent: Player = isPlayer1Piece ? .player1 : .player2
+        
+        // Update game state
+        if isPlayer1Piece {
+            if let index = gameState.player1Pieces.firstIndex(of: piece) {
+                gameState.player1Pieces.remove(at: index)
+            }
+        } else {
+            if let index = gameState.player2Pieces.firstIndex(of: piece) {
+                gameState.player2Pieces.remove(at: index)
+            }
+        }
+        
+        // Find and clear the occupied dot
+        if let dot = dots.first(where: { $0.frame.contains(piece.position) }),
+           let dotName = dot.name {
+            gameState.occupiedDots[dotName] = nil
+        }
+        
+        // Animate removal
+        piece.run(SKAction.sequence([
+            SKAction.scale(to: 1.3, duration: 0.1),
+            SKAction.fadeOut(withDuration: 0.2),
+            SKAction.removeFromParent()
+        ]))
+        
+        // Clear highlights and end removal phase
+        resetRemovableHighlights()
+        removeDadiMessage()
+        gameState.isRemovalPhase = false
+        
+        // Check win condition
+        if gameState.gamePhase == .placement {
+            // Switch turns
+            gameState.currentPlayer = (gameState.currentPlayer == .player1) ? .player2 : .player1
+            updateTurnIndicator()
+            gameState.checkPhaseTransition()
+            
+            if gameState.gamePhase == .movement {
+                highlightMovablePieces(for: gameState.currentPlayer)
+            }
+
+        }
+        else {
+            if let winner = checkWinCondition() {
+                showGameOver(winner: winner)
+            } else {
+                // Switch turns
+                gameState.currentPlayer = (gameState.currentPlayer == .player1) ? .player2 : .player1
+                updateTurnIndicator()
+                
+                // If in movement phase, highlight movable pieces
+                if gameState.gamePhase == .movement {
+                    highlightMovablePieces(for: gameState.currentPlayer)
+                }
+            }
+        }
+    }
+    
+    private func showInvalidSelectionFeedback(at position: CGPoint) {
+        let feedback = SKLabelNode(text: "Select opponent's piece!")
+        feedback.fontColor = .red
+        feedback.fontSize = 24
+        feedback.position = position
+        feedback.zPosition = 1000
+        addChild(feedback)
+        
+        feedback.run(SKAction.sequence([
+            SKAction.wait(forDuration: 1),
+            SKAction.fadeOut(withDuration: 0.3),
+            SKAction.removeFromParent()
+        ]))
+    }
+
+    // 6. Update your Dadi check to start removal phase
+    private func onDadiFormed(for player: Player) {
+        gameState.isRemovalPhase = true
+        highlightRemovableOpponentPieces(for: player)
+        showDadiFormedMessage()
+    }
+    
+    private func resetRemovableHighlights() {
+        // Remove all highlight nodes
+        movablePieces.removeAll()
+        children.filter { $0.name?.hasPrefix("Removable_highlight_") == true }.forEach {
+            $0.removeFromParent()
+        }
+    }
+    
+    
+    //********************************************************** Game Completion and restart Logic ************************************************************
+    
+    private func restartGame() {
+        // Create new scene to restart game
+        if let scene = SKScene(fileNamed: "GameScene") {
+            scene.scaleMode = .aspectFill
+            view?.presentScene(scene, transition: SKTransition.flipHorizontal(withDuration: 0.5))
+        }
+    }
+    
+    private func showGameOver(winner: Player) {
+        // Create game over background
+        let background = SKShapeNode(rectOf: CGSize(width: size.width * 0.7, height: size.height * 0.3))
+        background.fillColor = UIColor(white: 0, alpha: 0.7)
+        background.position = CGPoint(x: size.width/2, y: size.height/2)
+        background.zPosition = 100
+        
+        // Create winner text
+        let winnerText = SKLabelNode(text: "\(winner == .player1 ? "Player 1" : "Player 2") Wins!")
+        winnerText.fontName = "Avenir-Bold"
+        winnerText.fontSize = 48
+        winnerText.fontColor = winner == .player1 ? .blue : .red
+        winnerText.position = CGPoint(x: 0, y: 20)
+        winnerText.zPosition = 101
+        
+        // Create restart button
+        let restartButton = SKLabelNode(text: "Play Again")
+        restartButton.fontName = "Avenir-Medium"
+        restartButton.fontSize = 36
+        restartButton.fontColor = .white
+        restartButton.position = CGPoint(x: 0, y: -50)
+        restartButton.name = "restartButton"
+        restartButton.zPosition = 101
+        
+        // Add elements to background
+        background.addChild(winnerText)
+        background.addChild(restartButton)
+        
+        // Add to scene with animation
+        background.alpha = 0
+        addChild(background)
+        background.run(SKAction.fadeIn(withDuration: 0.5))
+        
+        // Disable further moves
+        isUserInteractionEnabled = false
+    }
+    
+    private func checkWinCondition() -> Player? {
+        // Player wins if opponent has less than 3 pieces remaining
+        if gameState.player2Pieces.count < 3 {
+            return .player1
+        }
+        if gameState.player1Pieces.count < 3 {
+            return .player2
+        }
+        return nil
     }
 }
