@@ -33,12 +33,13 @@ class BoardGameScene: SKScene {
         var currentPlayer: Player = .player1
         var player1Pieces: [SKShapeNode] = []
         var player2Pieces: [SKShapeNode] = []
-        var piecesRemaining: [Player: Int] = [.player1: 5, .player2: 5]
+        var piecesRemaining: [Player: Int] = [.player1: 11, .player2: 11]
         var occupiedDots: [String: Player] = [:] // Track which player occupies each dot
         var isRemovalPhase = false
+        var gameReset = false
         
         var gamePhase: GamePhase = .placement
-            
+        
         enum GamePhase {
             case placement
             case movement
@@ -50,20 +51,6 @@ class BoardGameScene: SKScene {
                 gamePhase = .movement
                 print("Game phase changed to movement")
             }
-        }
-        
-        var dadiFormedThisTurn = false
-        var piecesCaptured: [Player: Int] = [.player1: 0, .player2: 0]
-        
-        func checkWinCondition() -> Player? {
-            // Win if opponent has less than 3 pieces remaining
-            if piecesCaptured[.player1]! > 9 {
-                return .player1
-            }
-            if piecesRemaining[.player2]! > 9 {
-                return .player2
-            }
-            return nil
         }
     }
     
@@ -88,14 +75,14 @@ class BoardGameScene: SKScene {
     // ****************************************** Players Display Logic ****************************************************************
     private func updateTurnIndicator() {
         guard let indicator = childNode(withName: "playerIndicator") as? SKLabelNode,
-              let p1Counter = childNode(withName: "player1Counter") as? SKLabelNode,
-              let p2Counter = childNode(withName: "player2Counter") as? SKLabelNode else { return }
+              let pCounter = childNode(withName: "playerCounter") as? SKLabelNode else { return }
         
         indicator.text = gameState.currentPlayer == .player1 ? "Player 1's Turn" : "Player 2's Turn"
         indicator.fontColor = gameState.currentPlayer == .player1 ? .blue : .red
         
-        p1Counter.text = "Player 1: \(gameState.piecesRemaining[.player1]!) pieces"
-        p2Counter.text = "Player 2: \(gameState.piecesRemaining[.player2]!) pieces"
+        
+        pCounter.text = gameState.currentPlayer == .player1 ? "Player 1 has \(gameState.player1Pieces.count) pieces on the board" : "Player 2 has \(gameState.player2Pieces.count) pieces on the baord"
+        pCounter.fontColor = gameState.currentPlayer == .player1 ? .blue : .red
     }
     
     private func setupGameUI() {
@@ -103,24 +90,24 @@ class BoardGameScene: SKScene {
         let playerIndicator = SKLabelNode(text: "Player 1's Turn")
         playerIndicator.name = "playerIndicator"
         playerIndicator.fontSize = 24
-        playerIndicator.fontColor = .black
+        playerIndicator.fontColor = .blue
         playerIndicator.position = CGPoint(x: size.width/2, y: size.height - 80)
         addChild(playerIndicator)
         
         // Piece counters
-        let player1Counter = SKLabelNode(text: "Player 1: 11 pieces")
-        player1Counter.name = "player1Counter"
-        player1Counter.fontSize = 18
-        player1Counter.fontColor = .blue
-        player1Counter.position = CGPoint(x: 100, y: size.height - 100)
-        addChild(player1Counter)
+        let playerCounter = SKLabelNode(text: "Player 1 has 0 pieces on the board")
+        playerCounter.name = "playerCounter"
+        playerCounter.fontSize = 18
+        playerCounter.fontColor = .blue
+        playerCounter.position = CGPoint(x: size.width/2, y: size.height - 110)
+        addChild(playerCounter)
         
-        let player2Counter = SKLabelNode(text: "Player 2: 11 pieces")
+        /*let player2Counter = SKLabelNode(text: "Player 2: 11 pieces")
         player2Counter.name = "player2Counter"
         player2Counter.fontSize = 18
         player2Counter.fontColor = .red
         player2Counter.position = CGPoint(x: size.width - 100, y: size.height - 100)
-        addChild(player2Counter)
+        addChild(player2Counter)*/
     }
     
     // *************************************** Piece Placement Logic *************************************************************
@@ -212,7 +199,7 @@ class BoardGameScene: SKScene {
     private func addDotsToRectangle(rect: SKShapeNode) {
         guard let rectSize = rect.path?.boundingBox.size else { return }
         
-        let dotRadius: CGFloat = 7
+        let dotRadius: CGFloat = 9
         let dotPositions: [CGPoint] = [
             // Corners
             CGPoint(x: -rectSize.width/2, y: rectSize.height/2),    // Top-left
@@ -398,7 +385,7 @@ class BoardGameScene: SKScene {
             guard let dotName = dot.name,
                   gameState.occupiedDots[dotName] == nil else { continue }
             
-            let moveIndicator = SKShapeNode(circleOfRadius: 10)
+            let moveIndicator = SKShapeNode(circleOfRadius: 15)
             moveIndicator.fillColor = .green
             moveIndicator.strokeColor = .white
             moveIndicator.lineWidth = 2
@@ -421,7 +408,10 @@ class BoardGameScene: SKScene {
             handleRemovalPhaseTouch(at: location)
             return
         }
-        
+        if gameState.gameReset {
+            restartGame()
+            return
+        }
         switch gameState.gamePhase {
             case .placement:
                 handlePlacementPhaseTouch(at: location)
@@ -658,6 +648,7 @@ class BoardGameScene: SKScene {
     
     private func highlightRemovableOpponentPieces(for currentPlayer: Player) {
         resetHighlights()
+        resetRemovableHighlights()
         
         let opponent: Player = (currentPlayer == .player1) ? .player2 : .player1
         let opponentPieces = (opponent == .player1) ? gameState.player1Pieces : gameState.player2Pieces
@@ -675,6 +666,9 @@ class BoardGameScene: SKScene {
             highlight.zPosition = piece.zPosition + 1
             addChild(highlight)
             removablePieces.append(piece)
+        }
+        if removablePieces.isEmpty {
+            gameDrew(winner: currentPlayer)
         }
     }
     
@@ -795,15 +789,15 @@ class BoardGameScene: SKScene {
     
     private func restartGame() {
         // Create new scene to restart game
-        if let scene = SKScene(fileNamed: "GameScene") {
-            scene.scaleMode = .aspectFill
-            view?.presentScene(scene, transition: SKTransition.flipHorizontal(withDuration: 0.5))
-        }
+        print("Restarting game...")
+        let scene = BoardGameScene(size: size)
+        scene.scaleMode = .aspectFill
+        view?.presentScene(scene)
     }
     
     private func showGameOver(winner: Player) {
         // Create game over background
-        let background = SKShapeNode(rectOf: CGSize(width: size.width * 0.7, height: size.height * 0.3))
+        let background = SKShapeNode(rectOf: CGSize(width: size.width * 0.9, height: size.height * 0.3))
         background.fillColor = UIColor(white: 0, alpha: 0.7)
         background.position = CGPoint(x: size.width/2, y: size.height/2)
         background.zPosition = 100
@@ -834,8 +828,7 @@ class BoardGameScene: SKScene {
         addChild(background)
         background.run(SKAction.fadeIn(withDuration: 0.5))
         
-        // Disable further moves
-        isUserInteractionEnabled = false
+        gameState.gameReset = true
     }
     
     private func checkWinCondition() -> Player? {
@@ -847,5 +840,40 @@ class BoardGameScene: SKScene {
             return .player2
         }
         return nil
+    }
+    
+    private func gameDrew(winner: Player) {
+        let background = SKShapeNode(rectOf: CGSize(width: size.width * 0.9, height: size.height * 0.3))
+        background.fillColor = UIColor(white: 0, alpha: 0.7)
+        background.position = CGPoint(x: size.width/2, y: size.height/2)
+        background.zPosition = 100
+        
+        // Create winner text
+        let winnerText = SKLabelNode(text: "\(winner == .player1 ? "Player 1" : "Player 2") Drew the game!")
+        winnerText.fontName = "Avenir-Bold"
+        winnerText.fontSize = 48
+        winnerText.fontColor = winner == .player1 ? .blue : .red
+        winnerText.position = CGPoint(x: 0, y: 20)
+        winnerText.zPosition = 101
+        
+        // Create restart button
+        let restartButton = SKLabelNode(text: "Play Again")
+        restartButton.fontName = "Avenir-Medium"
+        restartButton.fontSize = 36
+        restartButton.fontColor = .white
+        restartButton.position = CGPoint(x: 0, y: -50)
+        restartButton.name = "restartButton"
+        restartButton.zPosition = 101
+        
+        // Add elements to background
+        background.addChild(winnerText)
+        background.addChild(restartButton)
+        
+        // Add to scene with animation
+        background.alpha = 0
+        addChild(background)
+        background.run(SKAction.fadeIn(withDuration: 0.5))
+        
+        gameState.gameReset = true
     }
 }
