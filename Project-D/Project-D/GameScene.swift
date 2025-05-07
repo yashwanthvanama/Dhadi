@@ -369,6 +369,10 @@ class BoardGameScene: SKScene {
                 }
             }
         }
+        if movablePieces.count == 0 {
+            let opponent: Player = (player == .player1) ? .player2 : .player1
+            gameDrew(winner: opponent)
+        }
         
     }
     
@@ -851,7 +855,7 @@ class BoardGameScene: SKScene {
         // Create winner text
         let winnerText = SKLabelNode(text: "\(winner == .player1 ? "Player 1" : "Player 2") Drew the game!")
         winnerText.fontName = "Avenir-Bold"
-        winnerText.fontSize = 48
+        winnerText.fontSize = 30
         winnerText.fontColor = winner == .player1 ? .blue : .red
         winnerText.position = CGPoint(x: 0, y: 20)
         winnerText.zPosition = 101
