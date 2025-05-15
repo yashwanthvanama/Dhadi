@@ -80,8 +80,12 @@ class BoardGameScene: SKScene {
         indicator.text = gameState.currentPlayer == .player1 ? "Player 1's Turn" : "Player 2's Turn"
         indicator.fontColor = gameState.currentPlayer == .player1 ? .blue : .red
         
-        
-        pCounter.text = gameState.currentPlayer == .player1 ? "Player 1 has \(gameState.player1Pieces.count) pieces on the board" : "Player 2 has \(gameState.player2Pieces.count) pieces on the baord"
+        if gameState.gamePhase == .movement {
+            pCounter.text = gameState.currentPlayer == .player1 ? "You have \(gameState.player1Pieces.count) pieces on the board" : "You have \(gameState.player2Pieces.count) pieces on the baord"
+        }
+        else {
+            pCounter.text = gameState.currentPlayer == .player1 ? "\(gameState.piecesRemaining[.player1]!) Pieces Remaining." : "\(gameState.piecesRemaining[.player2]!) Pieces Remaining."
+        }
         pCounter.fontColor = gameState.currentPlayer == .player1 ? .blue : .red
     }
     
@@ -95,19 +99,13 @@ class BoardGameScene: SKScene {
         addChild(playerIndicator)
         
         // Piece counters
-        let playerCounter = SKLabelNode(text: "Player 1 has 0 pieces on the board")
+        let playerCounter = SKLabelNode(text: "11 Pieces Remaining")
         playerCounter.name = "playerCounter"
         playerCounter.fontSize = 18
         playerCounter.fontColor = .blue
         playerCounter.position = CGPoint(x: size.width/2, y: size.height - 110)
         addChild(playerCounter)
         
-        /*let player2Counter = SKLabelNode(text: "Player 2: 11 pieces")
-        player2Counter.name = "player2Counter"
-        player2Counter.fontSize = 18
-        player2Counter.fontColor = .red
-        player2Counter.position = CGPoint(x: size.width - 100, y: size.height - 100)
-        addChild(player2Counter)*/
     }
     
     // *************************************** Piece Placement Logic *************************************************************
@@ -168,8 +166,8 @@ class BoardGameScene: SKScene {
         
         // Create 3 rectangles
         let rectSizes = [
-            CGSize(width: size.width * 0.8, height: size.height * 0.7),
-            CGSize(width: size.width * 0.6, height: size.height * 0.55),
+            CGSize(width: size.width * 0.90, height: size.height * 0.7),
+            CGSize(width: size.width * 0.65, height: size.height * 0.55),
             CGSize(width: size.width * 0.4, height: size.height * 0.4)
         ]
         let rectPositions = [
@@ -431,7 +429,7 @@ class BoardGameScene: SKScene {
                 let dotPositionInScene = parent.convert(dot.position, to: self)
                 let distance = hypot(dotPositionInScene.x - location.x, dotPositionInScene.y - location.y)
                 
-                if distance < dot.frame.width/2 * 1.5 { // 1.5x radius for easier touching
+                if distance < dot.frame.width/2 * 2.5 { // 1.5x radius for easier touching
                     // Visual feedback
                     dot.run(SKAction.sequence([
                         SKAction.scale(to: 1.3, duration: 0.1),
@@ -463,7 +461,7 @@ class BoardGameScene: SKScene {
                 let piecePosition = piece.parent?.convert(piece.position, to: self) ?? piece.position
                 let distance = hypot(piecePosition.x - location.x, piecePosition.y - location.y)
                 
-                if distance < 20 { // Adjust this threshold to your piece size
+                if distance < 25 { // Adjust this threshold to your piece size
                     // Clear any existing move indicators
                     //resetMoveIndicators()
                     
