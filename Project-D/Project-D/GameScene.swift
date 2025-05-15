@@ -8,6 +8,12 @@
 import SpriteKit
 import GameplayKit
 
+enum GamePhase {
+    case movement
+    case placement
+    case removal
+}
+
 class BoardGameScene: SKScene {
     private var rectangles: [SKShapeNode] = []
     private var connectionLines: [SKShapeNode] = []
@@ -28,28 +34,90 @@ class BoardGameScene: SKScene {
         case player1
         case player2
     }
-
+   
+    
+    struct GameStateSnapshot {
+        let occupiedDots: [String: Player]
+        let player1Pieces: [SKShapeNode]
+        let player2Pieces: [SKShapeNode]
+        let currentPlayer: Player
+        let gamePhase: GamePhase
+        let piecesRemaining: [Player: Int]
+    }
+    
     class GameState {
         var currentPlayer: Player = .player1
         var player1Pieces: [SKShapeNode] = []
         var player2Pieces: [SKShapeNode] = []
         var piecesRemaining: [Player: Int] = [.player1: 11, .player2: 11]
         var occupiedDots: [String: Player] = [:] // Track which player occupies each dot
-        var isRemovalPhase = false
         var gameReset = false
         
         var gamePhase: GamePhase = .placement
+
+        private var undoStack: [GameStateSnapshot] = []
+        private var redoStack: [GameStateSnapshot] = []
+        private var currentSnapshot: GameStateSnapshot
         
-        enum GamePhase {
-            case placement
-            case movement
+        
+        init() {
+            // Initialize with empty game state
+            currentSnapshot = GameStateSnapshot(
+                occupiedDots: [:],
+                player1Pieces: [],
+                player2Pieces: [],
+                currentPlayer: .player1,
+                gamePhase: .placement,
+                piecesRemaining: [.player1: 11, .player2: 11]
+            )
         }
         
+        func takeSnapshot() {
+            // Clear redo stack when making new moves
+            redoStack.removeAll()
+            
+            // Push current state to undo stack
+            undoStack.append(currentSnapshot)
+            
+            // Update current snapshot
+            currentSnapshot = GameStateSnapshot(
+                occupiedDots: occupiedDots,
+                player1Pieces: player1Pieces,
+                player2Pieces: player2Pieces,
+                currentPlayer: currentPlayer,
+                gamePhase: gamePhase,
+                piecesRemaining: piecesRemaining
+            )
+        }
+        
+        func undo() -> GameStateSnapshot? {
+            guard !undoStack.isEmpty else { return nil }
+            
+            // Push current state to redo stack
+            redoStack.append(currentSnapshot)
+            
+            // Pop last state from undo stack
+            currentSnapshot = undoStack.removeLast()
+            return currentSnapshot
+        }
+        
+        func redo() -> GameStateSnapshot? {
+            guard !redoStack.isEmpty else { return nil }
+            
+            // Push current state to undo stack
+            undoStack.append(currentSnapshot)
+            
+            // Pop last state from redo stack
+            currentSnapshot = redoStack.removeLast()
+            return currentSnapshot
+        }
         // Add this to check if all pieces are placed
         func checkPhaseTransition() {
             if piecesRemaining[.player1] == 0 && piecesRemaining[.player2] == 0 {
                 gamePhase = .movement
-                print("Game phase changed to movement")
+            }
+            else {
+                gamePhase = .placement
             }
         }
     }
@@ -106,6 +174,7 @@ class BoardGameScene: SKScene {
         playerCounter.position = CGPoint(x: size.width/2, y: size.height - 110)
         addChild(playerCounter)
         
+        setupUndoRedoButtons()
     }
     
     // *************************************** Piece Placement Logic *************************************************************
@@ -152,6 +221,7 @@ class BoardGameScene: SKScene {
                 highlightMovablePieces(for: gameState.currentPlayer)
             }
         }
+        gameState.takeSnapshot()
     }
     
     // **************************************** Game Board Setup Logic ************************************************************
@@ -270,6 +340,28 @@ class BoardGameScene: SKScene {
             connectionLines.append(line)
         }
         
+    }
+    
+    private func setupUndoRedoButtons() {
+        // Undo Button
+        let undoButton = SKLabelNode(text: "Undo")
+        undoButton.fontName = "Avenir-Bold"
+        undoButton.fontSize = 30
+        undoButton.fontColor = .red
+        undoButton.position = CGPoint(x: 100, y: 50)
+        undoButton.name = "undoButton"
+        undoButton.zPosition = 200
+        addChild(undoButton)
+        
+        // Redo Button
+        let redoButton = SKLabelNode(text: "Redo")
+        redoButton.fontName = "Avenir-Bold"
+        redoButton.fontSize = 30
+        redoButton.fontColor = .red
+        redoButton.position = CGPoint(x: size.width - 100, y: 50)
+        redoButton.name = "redoButton"
+        redoButton.zPosition = 100
+        addChild(redoButton)
     }
     
     //*********************************************** Piece Movement Logic ****************************************************************
@@ -401,25 +493,37 @@ class BoardGameScene: SKScene {
     //*********************************************** Touches Began Logic *****************************************************************
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-       
+        
         // Debug all nodes at touch location
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
         
-        if gameState.isRemovalPhase {
-            handleRemovalPhaseTouch(at: location)
-            return
+        for node in nodes(at: location) {
+            switch node.name {
+            case "undoButton":
+                undoLastMove()
+                return
+            case "redoButton":
+                redoLastMove()
+                return
+            default:
+                break
+            }
         }
+        
         if gameState.gameReset {
             restartGame()
             return
         }
+        
         switch gameState.gamePhase {
             case .placement:
                 handlePlacementPhaseTouch(at: location)
             case .movement:
                 handleMovementPhaseTouch(at: location)
-            }
+            case .removal:
+                handleRemovalPhaseTouch(at: location)
+        }
     }
     
     private func handlePlacementPhaseTouch(at location: CGPoint) {
@@ -448,7 +552,7 @@ class BoardGameScene: SKScene {
     private func handleMovementPhaseTouch(at location: CGPoint) {
         // Check if tapping a valid move location
         if let piece = selectedPiece,
-                let moveIndicator = nodes(at: location).first(where: { $0.name?.hasPrefix("moveIndicator_") == true }) {
+           let moveIndicator = nodes(at: location).first(where: { $0.name?.hasPrefix("moveIndicator_") == true }) {
             // Move the piece
             movePiece(piece, to: moveIndicator.position)
             selectedPiece = nil
@@ -527,6 +631,7 @@ class BoardGameScene: SKScene {
             // Highlight movable pieces for new player
             highlightMovablePieces(for: gameState.currentPlayer)
         }
+        gameState.takeSnapshot()
     }
     
     private func resetMoveIndicators() {
@@ -534,7 +639,7 @@ class BoardGameScene: SKScene {
             $0.removeFromParent()
         }
     }
-
+    
     // **************************************** Dadi Logic ****************************************
     
     private func checkForDadi(_ piece: SKShapeNode, player: Player) -> Bool {
@@ -565,10 +670,10 @@ class BoardGameScene: SKScene {
             
             // Check both directions
             let forwardDadi = isOccupiedByPlayer("dot_\(rectangleNum)_\(nextPos1)", player: player) &&
-                             isOccupiedByPlayer("dot_\(rectangleNum)_\(nextPos2)", player: player)
+            isOccupiedByPlayer("dot_\(rectangleNum)_\(nextPos2)", player: player)
             
             let backwardDadi = isOccupiedByPlayer("dot_\(rectangleNum)_\(prevPos1)", player: player) &&
-                              isOccupiedByPlayer("dot_\(rectangleNum)_\(prevPos2)", player: player)
+            isOccupiedByPlayer("dot_\(rectangleNum)_\(prevPos2)", player: player)
             
             return forwardDadi || backwardDadi
         }
@@ -581,7 +686,7 @@ class BoardGameScene: SKScene {
             
             // Check both directions
             let forwardDadi = isOccupiedByPlayer("dot_\(rectangleNum)_\(nextPos1)", player: player) &&
-                             isOccupiedByPlayer("dot_\(rectangleNum)_\(nextPos2)", player: player)
+            isOccupiedByPlayer("dot_\(rectangleNum)_\(nextPos2)", player: player)
             
             let backwardDadi = isOccupiedByPlayer("dot_\(rectPos1)_\(indexNum)", player: player) &&
             isOccupiedByPlayer("dot_\(rectPos2)_\(indexNum)", player: player)
@@ -726,7 +831,7 @@ class BoardGameScene: SKScene {
         // Clear highlights and end removal phase
         resetRemovableHighlights()
         removeDadiMessage()
-        gameState.isRemovalPhase = false
+        gameState.checkPhaseTransition()
         
         // Check win condition
         if gameState.gamePhase == .placement {
@@ -738,7 +843,7 @@ class BoardGameScene: SKScene {
             if gameState.gamePhase == .movement {
                 highlightMovablePieces(for: gameState.currentPlayer)
             }
-
+            
         }
         else {
             if let winner = checkWinCondition() {
@@ -754,6 +859,7 @@ class BoardGameScene: SKScene {
                 }
             }
         }
+        gameState.takeSnapshot()
     }
     
     private func showInvalidSelectionFeedback(at position: CGPoint) {
@@ -770,10 +876,10 @@ class BoardGameScene: SKScene {
             SKAction.removeFromParent()
         ]))
     }
-
+    
     // 6. Update your Dadi check to start removal phase
     private func onDadiFormed(for player: Player) {
-        gameState.isRemovalPhase = true
+        gameState.gamePhase = .removal
         highlightRemovableOpponentPieces(for: player)
         showDadiFormedMessage()
     }
@@ -878,4 +984,78 @@ class BoardGameScene: SKScene {
         
         gameState.gameReset = true
     }
+    
+    // ******************************************************** undo/redo logic **************************************************
+    
+    private func undoLastMove() {
+        guard let snapshot = gameState.undo() else { return }
+        
+        // Restore game state
+        restoreGameState(from: snapshot)
+        
+        // Update UI
+        updateTurnIndicator()
+        resetHighlights()
+        
+        // If in movement phase, highlight movable pieces
+        if gameState.gamePhase == .movement {
+            highlightMovablePieces(for: gameState.currentPlayer)
+        }
+        else if gameState.gamePhase == .removal {
+            highlightRemovableOpponentPieces(for: gameState.currentPlayer)
+        }
+    }
+    
+    private func redoLastMove() {
+        guard let snapshot = gameState.redo() else { return }
+        
+        // Restore game state
+        restoreGameState(from: snapshot)
+        
+        // Update UI
+        updateTurnIndicator()
+        resetHighlights()
+        
+        // If in movement phase, highlight movable pieces
+        if gameState.gamePhase == .movement {
+            highlightMovablePieces(for: gameState.currentPlayer)
+        }
+        else if gameState.gamePhase == .removal {
+            highlightRemovableOpponentPieces(for: gameState.currentPlayer)
+        }
+    }
+    
+    private func restoreGameState(from snapshot: GameStateSnapshot) {
+        // Clear current pieces
+        gameState.player1Pieces.forEach { $0.removeFromParent() }
+        gameState.player2Pieces.forEach { $0.removeFromParent() }
+        
+        // Restore state
+        gameState.occupiedDots = snapshot.occupiedDots
+        gameState.currentPlayer = snapshot.currentPlayer
+        gameState.gamePhase = snapshot.gamePhase
+        gameState.piecesRemaining = snapshot.piecesRemaining
+        
+        
+        // Recreate pieces
+        gameState.player1Pieces = recreatePieces(from: snapshot.player1Pieces, player: .player1)
+        gameState.player2Pieces = recreatePieces(from: snapshot.player2Pieces, player: .player2)
+    }
+    
+    private func recreatePieces(from pieces: [SKShapeNode], player: Player) -> [SKShapeNode] {
+        var recreatedPieces: [SKShapeNode] = []
+        for piece in pieces {
+            guard let pieceName = piece.name,
+                  let dot = dots.first(where: { $0.name == pieceName }) else {
+                continue
+            }
+            let piece = createPiece(for: player)
+            piece.position = dot.position
+            piece.name = dot.name
+            dot.parent?.addChild(piece)
+            recreatedPieces.append(piece)
+        }
+        return recreatedPieces
+    }
+    
 }
