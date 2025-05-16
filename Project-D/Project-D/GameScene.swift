@@ -38,8 +38,6 @@ class BoardGameScene: SKScene {
     
     struct GameStateSnapshot {
         let occupiedDots: [String: Player]
-        let player1Pieces: [SKShapeNode]
-        let player2Pieces: [SKShapeNode]
         let currentPlayer: Player
         let gamePhase: GamePhase
         let piecesRemaining: [Player: Int]
@@ -49,7 +47,7 @@ class BoardGameScene: SKScene {
         var currentPlayer: Player = .player1
         var player1Pieces: [SKShapeNode] = []
         var player2Pieces: [SKShapeNode] = []
-        var piecesRemaining: [Player: Int] = [.player1: 11, .player2: 11]
+        var piecesRemaining: [Player: Int] = [.player1: 5, .player2: 5]
         var occupiedDots: [String: Player] = [:] // Track which player occupies each dot
         var gameReset = false
         
@@ -64,8 +62,6 @@ class BoardGameScene: SKScene {
             // Initialize with empty game state
             currentSnapshot = GameStateSnapshot(
                 occupiedDots: [:],
-                player1Pieces: [],
-                player2Pieces: [],
                 currentPlayer: .player1,
                 gamePhase: .placement,
                 piecesRemaining: [.player1: 11, .player2: 11]
@@ -82,8 +78,6 @@ class BoardGameScene: SKScene {
             // Update current snapshot
             currentSnapshot = GameStateSnapshot(
                 occupiedDots: occupiedDots,
-                player1Pieces: player1Pieces,
-                player2Pieces: player2Pieces,
                 currentPlayer: currentPlayer,
                 gamePhase: gamePhase,
                 piecesRemaining: piecesRemaining
@@ -699,58 +693,6 @@ class BoardGameScene: SKScene {
         return gameState.occupiedDots[dotName] == player
     }
     
-    
-    private func showDadiFormedMessage() {
-        // Remove any existing message first
-        removeDadiMessage()
-        
-        // Create message label
-        let message = SKLabelNode(text: "DADI FORMED! Select opponent's piece to remove")
-        message.fontName = "Avenir-Bold"
-        message.fontColor = .red
-        message.horizontalAlignmentMode = .center
-        message.position = CGPoint(x: size.width/2, y: 50) // Bottom center
-        message.zPosition = 100
-        message.name = "dadiMessage"
-        
-        // Calculate dynamic font size based on screen width
-        let baseFontSize: CGFloat = 24
-        let minFontSize: CGFloat = 12
-        let maxFontSize: CGFloat = 36
-        let targetWidth = size.width * 0.9 // Use 90% of screen width
-        
-        // Adjust font size to fit
-        var fontSize = baseFontSize
-        var textWidth: CGFloat = 0
-        
-        repeat {
-            message.fontSize = fontSize
-            textWidth = message.frame.width
-            if textWidth > targetWidth {
-                fontSize -= 1
-            }
-        } while textWidth > targetWidth && fontSize > minFontSize
-        
-        // Ensure we don't go below minimum size
-        message.fontSize = max(fontSize, minFontSize)
-        // And don't exceed maximum size
-        message.fontSize = min(message.fontSize, maxFontSize)
-        
-        // Add pulsing animation
-        let pulse = SKAction.sequence([
-            SKAction.scale(to: 1.1, duration: 0.5),
-            SKAction.scale(to: 1.0, duration: 0.5)
-        ])
-        message.run(SKAction.repeatForever(pulse))
-        
-        // Add to scene
-        addChild(message)
-    }
-    // Also add this to clean up when done
-    private func removeDadiMessage() {
-        childNode(withName: "dadiMessage")?.removeFromParent()
-    }
-    
     // ************************************************************* Piece Removal Logic ***************************************************
     
     private func highlightRemovableOpponentPieces(for currentPlayer: Player) {
@@ -830,7 +772,6 @@ class BoardGameScene: SKScene {
         
         // Clear highlights and end removal phase
         resetRemovableHighlights()
-        removeDadiMessage()
         gameState.checkPhaseTransition()
         
         // Check win condition
@@ -881,7 +822,9 @@ class BoardGameScene: SKScene {
     private func onDadiFormed(for player: Player) {
         gameState.gamePhase = .removal
         highlightRemovableOpponentPieces(for: player)
-        showDadiFormedMessage()
+        guard let pCounter = childNode(withName: "playerCounter") as? SKLabelNode else { return }
+        pCounter.text = "Dadi Formed! Remove Opponent's Piece!"
+        pCounter.fontColor = .red
     }
     
     private func resetRemovableHighlights() {
@@ -996,6 +939,8 @@ class BoardGameScene: SKScene {
         // Update UI
         updateTurnIndicator()
         resetHighlights()
+        resetRemovableHighlights()
+        resetMoveIndicators()
         
         // If in movement phase, highlight movable pieces
         if gameState.gamePhase == .movement {
@@ -1015,6 +960,8 @@ class BoardGameScene: SKScene {
         // Update UI
         updateTurnIndicator()
         resetHighlights()
+        resetRemovableHighlights()
+        resetMoveIndicators()
         
         // If in movement phase, highlight movable pieces
         if gameState.gamePhase == .movement {
@@ -1036,26 +983,27 @@ class BoardGameScene: SKScene {
         gameState.gamePhase = snapshot.gamePhase
         gameState.piecesRemaining = snapshot.piecesRemaining
         
+        gameState.player1Pieces.removeAll()
+        gameState.player2Pieces.removeAll()
         
-        // Recreate pieces
-        gameState.player1Pieces = recreatePieces(from: snapshot.player1Pieces, player: .player1)
-        gameState.player2Pieces = recreatePieces(from: snapshot.player2Pieces, player: .player2)
+        recreatePiecesUpdated(from: snapshot.occupiedDots)
     }
     
-    private func recreatePieces(from pieces: [SKShapeNode], player: Player) -> [SKShapeNode] {
-        var recreatedPieces: [SKShapeNode] = []
-        for piece in pieces {
-            guard let pieceName = piece.name,
-                  let dot = dots.first(where: { $0.name == pieceName }) else {
-                continue
-            }
+    private func recreatePiecesUpdated(from occupiedDots:[String:Player]) {
+        for occupiedDot in occupiedDots {
+            let player = occupiedDot.value
+            let dotName = occupiedDot.key
+            guard let dot = dots.first(where: { $0.name == dotName }) else { continue }
             let piece = createPiece(for: player)
             piece.position = dot.position
             piece.name = dot.name
             dot.parent?.addChild(piece)
-            recreatedPieces.append(piece)
+            if player == .player1 {
+                gameState.player1Pieces.append(piece)
+            } else {
+                gameState.player2Pieces.append(piece)
+            }
         }
-        return recreatedPieces
     }
     
 }
