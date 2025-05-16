@@ -10,9 +10,13 @@ import SpriteKit
 import GameplayKit
 
 class GameViewController: UIViewController {
+    
+    var player1Name: String = ""
+    var player2Name: String = ""
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        
         
         if let view = self.view as! SKView? {
             /*// Load the SKScene from 'GameScene.sks'
@@ -25,6 +29,8 @@ class GameViewController: UIViewController {
             }*/
             let scene = BoardGameScene(size: view.bounds.size)
             scene.scaleMode = .aspectFill
+            scene.player1Name = player1Name
+            scene.player2Name = player2Name
             view.presentScene(scene)
             
             // Optional: Show debug info

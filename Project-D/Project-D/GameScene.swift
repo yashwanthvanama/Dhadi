@@ -15,6 +15,9 @@ enum GamePhase {
 }
 
 class BoardGameScene: SKScene {
+    var player1Name: String = ""
+    var player2Name: String = ""
+    
     private var rectangles: [SKShapeNode] = []
     private var connectionLines: [SKShapeNode] = []
     private var dots: [SKShapeNode] = []
@@ -47,7 +50,7 @@ class BoardGameScene: SKScene {
         var currentPlayer: Player = .player1
         var player1Pieces: [SKShapeNode] = []
         var player2Pieces: [SKShapeNode] = []
-        var piecesRemaining: [Player: Int] = [.player1: 5, .player2: 5]
+        var piecesRemaining: [Player: Int] = [.player1: 11, .player2: 11]
         var occupiedDots: [String: Player] = [:] // Track which player occupies each dot
         var gameReset = false
         
@@ -139,7 +142,7 @@ class BoardGameScene: SKScene {
         guard let indicator = childNode(withName: "playerIndicator") as? SKLabelNode,
               let pCounter = childNode(withName: "playerCounter") as? SKLabelNode else { return }
         
-        indicator.text = gameState.currentPlayer == .player1 ? "Player 1's Turn" : "Player 2's Turn"
+        indicator.text = gameState.currentPlayer == .player1 ? "\(player1Name)'s Turn" : "\(player2Name)'s Turn"
         indicator.fontColor = gameState.currentPlayer == .player1 ? .blue : .red
         
         if gameState.gamePhase == .movement {
@@ -153,7 +156,7 @@ class BoardGameScene: SKScene {
     
     private func setupGameUI() {
         // Current player indicator
-        let playerIndicator = SKLabelNode(text: "Player 1's Turn")
+        let playerIndicator = SKLabelNode(text: "\(player1Name)'s Turn")
         playerIndicator.name = "playerIndicator"
         playerIndicator.fontSize = 24
         playerIndicator.fontColor = .blue
@@ -854,7 +857,7 @@ class BoardGameScene: SKScene {
         background.zPosition = 100
         
         // Create winner text
-        let winnerText = SKLabelNode(text: "\(winner == .player1 ? "Player 1" : "Player 2") Wins!")
+        let winnerText = SKLabelNode(text: "\(winner == .player1 ? player1Name : player2Name) Wins!")
         winnerText.fontName = "Avenir-Bold"
         winnerText.fontSize = 48
         winnerText.fontColor = winner == .player1 ? .blue : .red
@@ -900,7 +903,7 @@ class BoardGameScene: SKScene {
         background.zPosition = 100
         
         // Create winner text
-        let winnerText = SKLabelNode(text: "\(winner == .player1 ? "Player 1" : "Player 2") Drew the game!")
+        let winnerText = SKLabelNode(text: "\(winner == .player1 ? player1Name : player2Name) Drew the game!")
         winnerText.fontName = "Avenir-Bold"
         winnerText.fontSize = 30
         winnerText.fontColor = winner == .player1 ? .blue : .red
