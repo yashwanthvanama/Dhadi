@@ -33,17 +33,40 @@ class GameViewController: UIViewController {
             scene.player2Name = player2Name
             view.presentScene(scene)
             
-            // Optional: Show debug info
-            view.showsFPS = true
-            view.showsNodeCount = true
-            
-            view.ignoresSiblingOrder = true
-            
-            view.showsFPS = true
-            view.showsNodeCount = true
         }
+        // Add Back button
+        addBackButton()
+    }
+    
+    func addBackButton() {
+        let backButton = UIButton(type: .system)
+
+        // Use SF Symbol for a back arrow
+        let image = UIImage(systemName: "chevron.left")
+        backButton.setImage(image, for: .normal)
+        backButton.tintColor = .black // Adjust color as needed
+
+        // Optional: Add some title text next to it
+        // backButton.setTitle("Back", for: .normal)
+
+        // Position safely below the notch
+        let buttonSize: CGFloat = 40
+        backButton.frame = CGRect(x: 20, y: view.safeAreaInsets.top + 20, width: buttonSize, height: buttonSize)
+
+        // Action
+        backButton.addTarget(self, action: #selector(backButtonTapped), for: .touchUpInside)
+
+        // Add to view
+        view.addSubview(backButton)
+
     }
 
+    @objc func backButtonTapped() {
+        // Go back to the previous view controller
+        self.dismiss(animated: true, completion: nil)
+        // Or use navigationController?.popViewController(animated: true) if using a navigation controller
+    }
+    
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         if UIDevice.current.userInterfaceIdiom == .phone {
             return .allButUpsideDown

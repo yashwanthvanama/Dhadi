@@ -846,6 +846,8 @@ class BoardGameScene: SKScene {
         print("Restarting game...")
         let scene = BoardGameScene(size: size)
         scene.scaleMode = .aspectFill
+        scene.player1Name = player1Name
+        scene.player2Name = player2Name
         view?.presentScene(scene)
     }
     
